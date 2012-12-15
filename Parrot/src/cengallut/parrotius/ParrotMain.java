@@ -1,5 +1,6 @@
 package cengallut.parrotius;
 
+import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -10,6 +11,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.annotation.TargetApi;
 import android.app.*;
+import android.util.Log;
 import android.view.*;
 import android.view.View.OnClickListener;
 import android.widget.*;
@@ -27,11 +29,12 @@ public class ParrotMain extends Activity {
 	private Handler mHandler = new Handler();
 	
 	private boolean isEchoing = false;
-	private int SEGMENT_LENGTH = 1000; // milliseconds
+	private boolean isRecording = false;
+	private boolean isPlaying = false;
+	private final int SEGMENT_LENGTH = 5000; // milliseconds
 	private final String LOG_TAG = "Parrotius";
-	private String FILE_EXTENSION = "/parrot-audio-buffer.3gp";
-	private int CYCLE;
-	private int COUNT = 0;
+	private final String FILE_EXTENSION = "/parrot-audio-buffer.3gp";
+	private int COUNT;
 	
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -44,31 +47,11 @@ public class ParrotMain extends Activity {
         
         uiInit();
         
-
-        //mRecorder = new MediaRecorder();
-        //mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        
-        
-        
-        
-
     }	// END OnCreate()
     
     @Override
     public void onPause(){
     	super.onPause();
-    	exitSequence();
-    }
-    
-    @Override
-    public void onDestroy() {
-    	super.onDestroy();
-    	exitSequence();
-    }
-    
-    @Override
-    public void onStop(){
-    	super.onStop();
     	exitSequence();
     }
     
@@ -78,8 +61,19 @@ public class ParrotMain extends Activity {
     	 * Must terminate all timer and thread
     	 * Delete all residue file in the Storage
     	 */
+    	if (mCycler != null){
+    		mCycler.cancel();
+    	}
     	
-    	mCycler.cancel();
+    	if (mRecorder != null) {
+            mRecorder.release();
+            mRecorder = null;
+        }
+
+        if (mPlayer != null) {
+            mPlayer.release();
+            mPlayer = null;
+        }
     }
 
     @Override
@@ -91,6 +85,7 @@ public class ParrotMain extends Activity {
     public ParrotMain(){
     	mFileName = Environment.getExternalStorageDirectory().getAbsolutePath();
         mFileName += FILE_EXTENSION;
+        COUNT = 0;
     }
     
     private void uiInit(){
@@ -104,18 +99,7 @@ public class ParrotMain extends Activity {
         			isEchoing = false;
         		} else {
         			mCycler = new Timer();
-        			mCycler.schedule(
-        	        		new TimerTask(){
-        						@Override
-        						public void run() {
-        							COUNT ++;
-        							mHandler.post(new Runnable(){
-										public void run() {
-											tvStatus.setText("count: " + COUNT);
-										}
-        							});
-        						}
-        	        		},0,SEGMENT_LENGTH);
+        			mCycler.schedule(new Conductor(),0,SEGMENT_LENGTH);
         	        isEchoing = true;
         		}
         	}
@@ -125,10 +109,92 @@ public class ParrotMain extends Activity {
         btnAdjust.setOnClickListener(new OnClickListener(){
         	public void onClick(View view){
         		Toast.makeText(ParrotMain.this, "Adjust is clicked", Toast.LENGTH_SHORT).show();
+        		COUNT = 0;
         	}
         });
         
         tvStatus = (TextView)findViewById(R.id.tv_status);
         
     }
+    
+    public class Conductor extends TimerTask{
+    	public void run(){
+    		COUNT ++;
+    		mHandler.post(new Runnable(){
+				public void run(){
+					tvStatus.setText("count: " + COUNT);
+				}
+    		});
+    		
+    		// Start or stop audio activity
+    		if (COUNT == 2){
+    			onRecord(true);
+    			isRecording = !isRecording;
+    		} else if (COUNT == 3){
+    			onRecord(false);
+    			isRecording = !isRecording;
+    			onPlay(true);
+    			isPlaying = !isPlaying;
+    		} else if (COUNT == 4){
+    			onPlay(false);
+    			isPlaying = !isPlaying;
+    		}
+    	}
+    }
+    
+    // ---------- BEGIN audio methods ---------- //
+    private void startPlaying() {
+        mPlayer = new MediaPlayer();
+        try {
+            mPlayer.setDataSource(mFileName);
+            mPlayer.prepare();
+            mPlayer.start();
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "prepare() failed");
+        }
+    }
+
+    private void stopPlaying() {
+        mPlayer.release();
+        mPlayer = null;
+    }
+
+    private void startRecording() {
+        mRecorder = new MediaRecorder();
+        mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+        mRecorder.setOutputFile(mFileName);
+        mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+
+        try {
+            mRecorder.prepare();
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "prepare() failed");
+        }
+
+        mRecorder.start();
+    }
+
+    private void stopRecording() {
+        mRecorder.stop();
+        mRecorder.release();
+        mRecorder = null;
+    }
+    
+    private void onRecord(boolean start) {
+        if (start) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    }
+
+    private void onPlay(boolean start) {
+        if (start) {
+            startPlaying();
+        } else {
+            stopPlaying();
+        }
+    }
+    // ---------- END audio methods ---------- //
 }
