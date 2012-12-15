@@ -28,9 +28,9 @@ public class ParrotMain extends Activity {
 	private Timer mCycler;
 	private Handler mHandler = new Handler();
 	
-	private boolean isEchoing = false;
-	private boolean isRecording = false;
-	private boolean isPlaying = false;
+	private boolean isEchoing;
+	private boolean isRecording;
+	private boolean isPlaying;
 	private final int SEGMENT_LENGTH = 5000; // milliseconds
 	private final String LOG_TAG = "Parrotius";
 	private final String FILE_EXTENSION = "/parrot-audio-buffer.3gp";
@@ -44,6 +44,11 @@ public class ParrotMain extends Activity {
         // ActionBar init
         ActionBar bar = this.getActionBar();
         bar.setDisplayShowTitleEnabled(true);
+        
+        COUNT = 0;
+        isEchoing = false;
+        isPlaying = false;
+        isRecording = false;
         
         uiInit();
         
@@ -85,7 +90,6 @@ public class ParrotMain extends Activity {
     public ParrotMain(){
     	mFileName = Environment.getExternalStorageDirectory().getAbsolutePath();
         mFileName += FILE_EXTENSION;
-        COUNT = 0;
     }
     
     private void uiInit(){
@@ -95,8 +99,12 @@ public class ParrotMain extends Activity {
         		Toast.makeText(ParrotMain.this, "Start is clicked", Toast.LENGTH_SHORT).show();
         		
         		if (isEchoing){
-        			mCycler.cancel();
+        			exitSequence();
+        			
         			isEchoing = false;
+        			isRecording = false;
+        			isPlaying = false;
+        			tvStatus.setText("count: " + COUNT);
         		} else {
         			mCycler = new Timer();
         			mCycler.schedule(new Conductor(),0,SEGMENT_LENGTH);
@@ -110,6 +118,7 @@ public class ParrotMain extends Activity {
         	public void onClick(View view){
         		Toast.makeText(ParrotMain.this, "Adjust is clicked", Toast.LENGTH_SHORT).show();
         		COUNT = 0;
+        		tvStatus.setText("count: " + COUNT);
         	}
         });
         
@@ -118,26 +127,71 @@ public class ParrotMain extends Activity {
     }
     
     public class Conductor extends TimerTask{
+    	private static final String c = "count: ";
+    	private static final String rec = " | RECORDING";
+    	private static final String pl = " | PLAYING";
+    	private static final String rdy = " | READYING";
+    	
     	public void run(){
     		COUNT ++;
-    		mHandler.post(new Runnable(){
-				public void run(){
-					tvStatus.setText("count: " + COUNT);
-				}
-    		});
+    		statusUpdate(0);
     		
     		// Start or stop audio activity
-    		if (COUNT == 2){
-    			onRecord(true);
-    			isRecording = !isRecording;
-    		} else if (COUNT == 3){
-    			onRecord(false);
-    			isRecording = !isRecording;
-    			onPlay(true);
-    			isPlaying = !isPlaying;
-    		} else if (COUNT == 4){
-    			onPlay(false);
-    			isPlaying = !isPlaying;
+    		if (COUNT > 1){
+    			
+    			if (!isRecording && !isPlaying){
+    				// this is at the start of the process
+    				isRecording = !isRecording;
+    				onRecord(isRecording);
+    				statusUpdate(1);
+    			} else {
+    				isRecording = !isRecording;
+    				onRecord(isRecording);
+    				isPlaying = !isPlaying;
+    				onPlay(isPlaying);
+    				
+    				if (isRecording){
+    					statusUpdate(1);
+    				} else {
+    					statusUpdate(2);
+    				}
+    			}
+    			
+    		} else {
+    			statusUpdate(3);
+    		}
+    	}
+    	
+    	private void statusUpdate(int stat){
+    		switch (stat){
+    		case 0:
+    			mHandler.post(new Runnable(){
+					public void run(){
+						tvStatus.setText(c + COUNT);
+					}
+				});
+    			return;
+    		case 1:
+    			mHandler.post(new Runnable(){
+					public void run(){
+						tvStatus.setText(c + COUNT + rec);
+					}
+				});
+    			return;
+    		case 2:
+    			mHandler.post(new Runnable(){
+					public void run(){
+						tvStatus.setText(c + COUNT + pl);
+					}
+				});
+    			return;
+    		case 3:
+    			mHandler.post(new Runnable(){
+					public void run(){
+						tvStatus.setText(c + COUNT + rdy);
+					}
+				});
+    			return;
     		}
     	}
     }
